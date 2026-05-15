@@ -127,7 +127,7 @@ for offer in offers.findall('offer'):
                 'new_name_ru': new_name_ru,
                 'new_desc_ru': new_desc_ru
             }
-            time.sleep(1.5)
+            time.sleep(4.5)
         except Exception as e:
             print(f"Ошибка Gemini: {e}")
             new_name_ua = orig_name
