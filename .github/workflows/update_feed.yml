@@ -1,0 +1,38 @@
+name: Auto Update Prom Feed
+
+on:
+  schedule:
+    - cron: '0 */4 * * *' # Запуск каждые 4 часа
+  workflow_dispatch: # Кнопка для ручного запуска
+
+permissions:
+  contents: write 
+
+jobs:
+  update-feed:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        
+    - name: Install dependencies
+      run: |
+        pip install google-genai
+        
+    - name: Run Python script
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      run: python generate_prom_xml.py
+        
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action Bot"
+        git add prom_import.xml processed_db.json
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update Prom XML feed" && git push)
