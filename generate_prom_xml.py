@@ -142,8 +142,7 @@ for offer in offers.findall('offer'):
     ET.SubElement(out_offer, "name").text = new_name_ru
     ET.SubElement(out_offer, "name_ua").text = new_name_ua
     
-    unique_sku = f"BUNCH-{sku}"
-    ET.SubElement(out_offer, "vendorCode").text = unique_sku
+    ET.SubElement(out_offer, "vendorCode").text = sku
     
     ET.SubElement(out_offer, "price").text = str(retail_price)
     ET.SubElement(out_offer, "currencyId").text = "UAH"
