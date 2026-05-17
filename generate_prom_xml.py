@@ -3,24 +3,34 @@ import json
 import os
 import time
 import urllib.request
-from google import genai
-from google.genai import types
+import sys
+import subprocess
 
-gemini_key = os.environ.get('GEMINI_API_KEY')
-if not gemini_key:
+try:
+    from groq import Groq
+except ImportError:
+    print("Installing groq library...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "groq"])
+    from groq import Groq
+
+# Use GEMINI_API_KEY (from GitHub Action secrets) or GROQ_API_KEY (from .env)
+api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GROQ_API_KEY')
+if not api_key:
     try:
         with open('.env', 'r', encoding='utf-8') as f:
             for line in f:
-                if line.startswith('GEMINI_API_KEY'):
-                    gemini_key = line.split('=', 1)[1].strip()
+                if line.startswith('GROQ_API_KEY'):
+                    api_key = line.split('=', 1)[1].strip()
+                elif line.startswith('GEMINI_API_KEY') and not api_key:
+                    api_key = line.split('=', 1)[1].strip()
     except Exception:
         pass
 
-if not gemini_key:
-    print("ERROR: GEMINI_API_KEY не найден!")
+if not api_key:
+    print("ERROR: API_KEY не найден!")
     exit(1)
 
-client = genai.Client(api_key=gemini_key)
+client = Groq(api_key=api_key)
 
 FEED_URL = 'https://smart-b2b.com.ua/ua/index.php?route=extension/feed/unixml/droplangua'
 INPUT_XML = 'smart-b2b-feed.xml'
@@ -91,42 +101,54 @@ for offer in offers.findall('offer'):
         new_keywords_ua = db[sku]['keywords_ua']
         new_keywords_ru = db[sku]['keywords_ru']
     else:
-        print(f"Генерируем текст Gemini (UA + RU) для: {sku}")
+        print(f"Генерируем текст Groq (UA + RU) для: {sku}")
         prompt = f"""
 Ты опытный маркетолог и SEO-специалист для маркетплейсов.
 Твоя задача — сделать рерайт названия и описания товара, чтобы они были уникальными, продающими и привлекали покупателей. Также сгенерируй список релевантных поисковых запросов (ключевых слов) для этого товара, по которым покупатели ищут его на маркетплейсе (до 15 ключевых фраз через запятую).
 Оригинальное название: {orig_name}
 Оригинальное описание: {orig_desc}
 
-Сгенерируй ответ в формате JSON. Обязательно предоставь вариант на украинском языке (ua) и на русском языке (ru). Описание должно быть в формате HTML (используй теги <p>, <ul>, <li>, <strong>). Поисковые запросы (keywords) должны быть строкой с ключевыми словами через запятую.
+Ты должен вернуть строго JSON-объект с плоской структурой и следующими ключами:
+- new_title_ua: (название на украинском языке)
+- new_description_ua: (описание на украинском в формате HTML с тегами <p>, <ul>, <li>, <strong>)
+- new_title_ru: (название на русском языке)
+- new_description_ru: (описание на русском в формате HTML с тегами <p>, <ul>, <li>, <strong>)
+- keywords_ua: (строка поисковых запросов на украинском через запятую)
+- keywords_ru: (строка поисковых запросов на русском через запятую)
 """
         try:
-            response = client.models.generate_content(
-                model='gemini-2.0-flash',
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=types.Schema(
-                        type="OBJECT",
-                        properties={
-                            "new_title_ua": types.Schema(type="STRING"),
-                            "new_description_ua": types.Schema(type="STRING"),
-                            "new_title_ru": types.Schema(type="STRING"),
-                            "new_description_ru": types.Schema(type="STRING"),
-                            "keywords_ua": types.Schema(type="STRING"),
-                            "keywords_ru": types.Schema(type="STRING"),
-                        }
-                    )
-                )
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt,
+                    }
+                ],
+                model="llama-3.3-70b-versatile",
+                response_format={"type": "json_object"},
             )
-            data = json.loads(response.text)
-            new_name_ua = data.get('new_title_ua', orig_name)
-            new_desc_ua = data.get('new_description_ua', orig_desc)
-            new_name_ru = data.get('new_title_ru', orig_name)
-            new_desc_ru = data.get('new_description_ru', orig_desc)
-            new_keywords_ua = data.get('keywords_ua', '')
-            new_keywords_ru = data.get('keywords_ru', '')
+            result_text = chat_completion.choices[0].message.content
+            data = json.loads(result_text)
             
+            # Universal parser for both flat and nested structures
+            if 'ua' in data and isinstance(data['ua'], dict):
+                new_name_ua = data['ua'].get('title', data['ua'].get('new_title_ua', orig_name))
+                new_desc_ua = data['ua'].get('description', data['ua'].get('new_description_ua', orig_desc))
+                new_keywords_ua = data['ua'].get('keywords', data['ua'].get('keywords_ua', ''))
+            else:
+                new_name_ua = data.get('new_title_ua', orig_name)
+                new_desc_ua = data.get('new_description_ua', orig_desc)
+                new_keywords_ua = data.get('keywords_ua', '')
+
+            if 'ru' in data and isinstance(data['ru'], dict):
+                new_name_ru = data['ru'].get('title', data['ru'].get('new_title_ru', orig_name))
+                new_desc_ru = data['ru'].get('description', data['ru'].get('new_description_ru', orig_desc))
+                new_keywords_ru = data['ru'].get('keywords', data['ru'].get('keywords_ru', ''))
+            else:
+                new_name_ru = data.get('new_title_ru', orig_name)
+                new_desc_ru = data.get('new_description_ru', orig_desc)
+                new_keywords_ru = data.get('keywords_ru', '')
+                
             db[sku] = {
                 'new_name_ua': new_name_ua,
                 'new_desc_ua': new_desc_ua,
@@ -135,9 +157,9 @@ for offer in offers.findall('offer'):
                 'keywords_ua': new_keywords_ua,
                 'keywords_ru': new_keywords_ru
             }
-            time.sleep(7.0)
+            time.sleep(3.0)
         except Exception as e:
-            print(f"Ошибка Gemini: {e}")
+            print(f"Ошибка Groq: {e}")
             new_name_ua = orig_name
             new_desc_ua = orig_desc
             new_name_ru = orig_name
