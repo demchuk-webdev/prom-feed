@@ -124,7 +124,7 @@ for offer in offers.findall('offer'):
                         "content": prompt,
                     }
                 ],
-                model="llama-3.3-70b-versatile",
+                model="llama-3.1-8b-instant",
                 response_format={"type": "json_object"},
             )
             result_text = chat_completion.choices[0].message.content
