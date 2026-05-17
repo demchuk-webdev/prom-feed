@@ -83,20 +83,22 @@ for offer in offers.findall('offer'):
     orig_name = name_el.text
     orig_desc = desc_el.text
     
-    if sku in db:
+    if sku in db and 'keywords_ua' in db[sku] and 'keywords_ru' in db[sku]:
         new_name_ua = db[sku]['new_name_ua']
         new_desc_ua = db[sku]['new_desc_ua']
         new_name_ru = db[sku]['new_name_ru']
         new_desc_ru = db[sku]['new_desc_ru']
+        new_keywords_ua = db[sku]['keywords_ua']
+        new_keywords_ru = db[sku]['keywords_ru']
     else:
         print(f"Генерируем текст Gemini (UA + RU) для: {sku}")
         prompt = f"""
 Ты опытный маркетолог и SEO-специалист для маркетплейсов.
-Твоя задача — сделать рерайт названия и описания товара, чтобы они были уникальными, продающими и привлекали покупателей.
+Твоя задача — сделать рерайт названия и описания товара, чтобы они были уникальными, продающими и привлекали покупателей. Также сгенерируй список релевантных поисковых запросов (ключевых слов) для этого товара, по которым покупатели ищут его на маркетплейсе (до 15 ключевых фраз через запятую).
 Оригинальное название: {orig_name}
 Оригинальное описание: {orig_desc}
 
-Сгенерируй ответ в формате JSON. Обязательно предоставь вариант на украинском языке (ua) и на русском языке (ru). Описание должно быть в формате HTML (используй теги <p>, <ul>, <li>, <strong>).
+Сгенерируй ответ в формате JSON. Обязательно предоставь вариант на украинском языке (ua) и на русском языке (ru). Описание должно быть в формате HTML (используй теги <p>, <ul>, <li>, <strong>). Поисковые запросы (keywords) должны быть строкой с ключевыми словами через запятую.
 """
         try:
             response = client.models.generate_content(
@@ -111,6 +113,8 @@ for offer in offers.findall('offer'):
                             "new_description_ua": types.Schema(type="STRING"),
                             "new_title_ru": types.Schema(type="STRING"),
                             "new_description_ru": types.Schema(type="STRING"),
+                            "keywords_ua": types.Schema(type="STRING"),
+                            "keywords_ru": types.Schema(type="STRING"),
                         }
                     )
                 )
@@ -120,12 +124,16 @@ for offer in offers.findall('offer'):
             new_desc_ua = data.get('new_description_ua', orig_desc)
             new_name_ru = data.get('new_title_ru', orig_name)
             new_desc_ru = data.get('new_description_ru', orig_desc)
+            new_keywords_ua = data.get('keywords_ua', '')
+            new_keywords_ru = data.get('keywords_ru', '')
             
             db[sku] = {
                 'new_name_ua': new_name_ua,
                 'new_desc_ua': new_desc_ua,
                 'new_name_ru': new_name_ru,
-                'new_desc_ru': new_desc_ru
+                'new_desc_ru': new_desc_ru,
+                'keywords_ua': new_keywords_ua,
+                'keywords_ru': new_keywords_ru
             }
             time.sleep(4.5)
         except Exception as e:
@@ -134,6 +142,8 @@ for offer in offers.findall('offer'):
             new_desc_ua = orig_desc
             new_name_ru = orig_name
             new_desc_ru = orig_desc
+            new_keywords_ua = ""
+            new_keywords_ru = ""
 
     retail_price = calc_price(supplier_price)
     
@@ -152,10 +162,13 @@ for offer in offers.findall('offer'):
         ET.SubElement(out_offer, "categoryId").text = cat_el.text
         
     vendor_el = offer.find('vendor')
-    if vendor_el is not None:
-        ET.SubElement(out_offer, "vendor").text = vendor_el.text
+    if vendor_el is not None and vendor_el.text:
+        vendor_text = vendor_el.text.strip()
+        invalid_vendors = ["невідомий виробник", "неизвестный производитель", "unknown"]
+        if vendor_text and vendor_text.lower() not in invalid_vendors:
+            ET.SubElement(out_offer, "vendor").text = vendor_text
     
-    for pic in offer.findall('picture'):
+    for pic in offer.findall('picture')[:10]:
         ET.SubElement(out_offer, "picture").text = pic.text
         
     cdata_desc_ru = f"<![CDATA[{new_desc_ru}]]>".replace("<", "___LT___").replace(">", "___GT___")
@@ -163,6 +176,11 @@ for offer in offers.findall('offer'):
     
     ET.SubElement(out_offer, "description").text = cdata_desc_ru
     ET.SubElement(out_offer, "description_ua").text = cdata_desc_ua
+    
+    if new_keywords_ru:
+        ET.SubElement(out_offer, "keywords").text = new_keywords_ru
+    if new_keywords_ua:
+        ET.SubElement(out_offer, "keywords_ua").text = new_keywords_ua
     
     for param in offer.findall('param'):
         p = ET.SubElement(out_offer, "param", name=param.get('name'))
