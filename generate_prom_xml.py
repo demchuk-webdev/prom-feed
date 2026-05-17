@@ -102,7 +102,7 @@ for offer in offers.findall('offer'):
 """
         try:
             response = client.models.generate_content(
-                model='gemini-1.5-flash',
+                model='gemini-2.0-flash',
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -135,7 +135,7 @@ for offer in offers.findall('offer'):
                 'keywords_ua': new_keywords_ua,
                 'keywords_ru': new_keywords_ru
             }
-            time.sleep(4.5)
+            time.sleep(7.0)
         except Exception as e:
             print(f"Ошибка Gemini: {e}")
             new_name_ua = orig_name
