@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE yml_catalog SYSTEM "shops.dtd">
-<yml_catalog date="2026-08-07 00:50"><shop><categories><category id="65">Аксесуари для гаджетів</category>
+<yml_catalog date="2026-08-07 05:28"><shop><categories><category id="65">Аксесуари для гаджетів</category>
 <category id="72" parentId="65">Ремінці для годинників</category>
 <category id="73" parentId="65">Чохли для навушників</category>
 <category id="81" parentId="72">Smart watch 38 mm / 40 mm / 41 mm</category>
